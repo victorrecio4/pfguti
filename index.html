@@ -7,12 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-<!-- ===== FIREBASE CONFIG — SUSTITUYE ESTOS VALORES POR LOS DE TU PROYECTO ===== -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-  // 🔧 PASO 1: Pega aquí la configuración de tu proyecto Firebase
+<!-- ===== FIREBASE CONFIG ===== -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
   const firebaseConfig = {
     apiKey:            "AIzaSyBUM5P67g388NYH00jR19--u1bNQGzJa-4",
     authDomain:        "pfguti-72e6e.firebaseapp.com",
@@ -23,10 +21,9 @@
     measurementId:     "G-X8LB5QCHKN"
   };
 
-  const app = initializeApp(firebaseConfig);
-  const db  = getFirestore(app);
+  firebase.initializeApp(firebaseConfig);
+  const _fbdb = firebase.firestore();
 
-  // ── Clave → nombre del documento en Firestore (colección "bmnava") ──
   const KEY_MAP = {
     bmnava_physio:     'physio',
     bmnava_med:        'med',
@@ -37,47 +34,43 @@
     bmnava_caltpl:     'caltpl',
   };
 
-  // ── API pública que usa el resto del código ──
   window._DB = {
-    /** Lee un doc; devuelve el string JSON o null */
     async get(lsKey) {
       const name = KEY_MAP[lsKey];
-      if (!name) return localStorage.getItem(lsKey);   // fallback para claves no mapeadas
+      if (!name) return localStorage.getItem(lsKey);
       try {
-        const snap = await getDoc(doc(db, 'bmnava', name));
-        return snap.exists() ? snap.data().v : null;
+        const snap = await _fbdb.collection('bmnava').doc(name).get();
+        return snap.exists ? snap.data().v : null;
       } catch(e) {
         console.warn('[DB] get error', lsKey, e);
         return localStorage.getItem(lsKey);
       }
     },
-    /** Escribe un doc con el string JSON */
     async set(lsKey, value) {
       const name = KEY_MAP[lsKey];
       if (!name) { localStorage.setItem(lsKey, value); return; }
       try {
-        await setDoc(doc(db, 'bmnava', name), { v: value, ts: Date.now() });
+        await _fbdb.collection('bmnava').doc(name).set({ v: value, ts: Date.now() });
+        console.log('[DB] guardado OK:', name);
       } catch(e) {
         console.warn('[DB] set error', lsKey, e);
-        localStorage.setItem(lsKey, value);  // fallback local
+        localStorage.setItem(lsKey, value);
       }
     },
-    /** Escucha cambios en tiempo real y llama a cb(jsonString) */
     listen(lsKey, cb) {
       const name = KEY_MAP[lsKey];
       if (!name) return;
-      onSnapshot(doc(db, 'bmnava', name), snap => {
-        if (snap.exists()) cb(snap.data().v);
+      _fbdb.collection('bmnava').doc(name).onSnapshot(snap => {
+        if (snap.exists) cb(snap.data().v);
       });
     }
   };
 
-  // ── Carga inicial: rellena STATE desde Firestore antes de que arranque la app ──
   window._DB_READY = (async () => {
+    window._DB_PRELOAD = {};
     const load = async (lsKey, stateKey, defaultVal) => {
       const raw = await window._DB.get(lsKey);
-      try { window._DB_PRELOAD = window._DB_PRELOAD || {};
-            window._DB_PRELOAD[stateKey] = raw ? JSON.parse(raw) : defaultVal; }
+      try { window._DB_PRELOAD[stateKey] = raw ? JSON.parse(raw) : defaultVal; }
       catch(e) { window._DB_PRELOAD[stateKey] = defaultVal; }
     };
     await Promise.all([
@@ -89,7 +82,6 @@
       load('bmnava_calmeta',    'calMeta',      {}),
       load('bmnava_caltpl',     'calTpl',       []),
     ]);
-    // Suscripción en tiempo real: si otro usuario guarda, actualiza STATE y re-renderiza
     window._DB.listen('bmnava_physio',  v => { try{ STATE.physioUser=JSON.parse(v);  buildPlayers(); renderAll(); }catch(e){} });
     window._DB.listen('bmnava_cal',     v => { try{ STATE.calendar=JSON.parse(v);    renderCalendar(); }catch(e){} });
     window._DB.listen('bmnava_calmeta', v => { try{ STATE.calMeta=JSON.parse(v);     renderCalendar(); }catch(e){} });
