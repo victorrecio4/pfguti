@@ -28,7 +28,7 @@
   const _fbauth = firebase.auth();
 
   /* ── Pantalla de login ── */
-  (function injectLogin(){
+  document.addEventListener('DOMContentLoaded', function(){
     const css = `
       #bm-login-overlay{position:fixed;inset:0;background:#0f172a;display:flex;align-items:center;justify-content:center;z-index:99999;font-family:'Inter',sans-serif;}
       #bm-login-box{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:40px 36px;width:100%;max-width:380px;box-shadow:0 25px 50px rgba(0,0,0,.5);}
@@ -108,7 +108,7 @@
     document.getElementById('bm-pass').addEventListener('keydown', e => {
       if(e.key === 'Enter') document.getElementById('bm-login-btn').click();
     });
-  })();
+  });
 
   /* ── Observador de sesión: muestra/oculta la app según login ── */
   window._AUTH_READY = new Promise(resolve => {
