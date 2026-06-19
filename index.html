@@ -7,9 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
+
 <!-- ===== FIREBASE CONFIG ===== -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
   const firebaseConfig = {
     apiKey:            "AIzaSyBUM5P67g388NYH00jR19--u1bNQGzJa-4",
@@ -22,8 +24,108 @@
   };
 
   firebase.initializeApp(firebaseConfig);
-  const _fbdb = firebase.firestore();
+  const _fbdb  = firebase.firestore();
+  const _fbauth = firebase.auth();
 
+  /* ── Pantalla de login ── */
+  (function injectLogin(){
+    const css = `
+      #bm-login-overlay{position:fixed;inset:0;background:#0f172a;display:flex;align-items:center;justify-content:center;z-index:99999;font-family:'Inter',sans-serif;}
+      #bm-login-box{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:40px 36px;width:100%;max-width:380px;box-shadow:0 25px 50px rgba(0,0,0,.5);}
+      #bm-login-box h2{color:#f1f5f9;font-size:22px;font-weight:700;margin:0 0 4px;}
+      #bm-login-box p{color:#94a3b8;font-size:13px;margin:0 0 28px;}
+      #bm-login-box label{display:block;color:#cbd5e1;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;}
+      #bm-login-box input{width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 12px;color:#f1f5f9;font-size:14px;margin-bottom:16px;outline:none;}
+      #bm-login-box input:focus{border-color:#6366f1;}
+      #bm-login-btn{width:100%;background:#6366f1;color:#fff;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:16px;}
+      #bm-login-btn:hover{background:#4f46e5;}
+      #bm-login-btn:disabled{opacity:.5;cursor:not-allowed;}
+      #bm-google-btn{width:100%;background:#fff;color:#1e293b;border:1px solid #e2e8f0;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;}
+      #bm-google-btn:hover{background:#f8fafc;}
+      #bm-google-btn svg{width:18px;height:18px;}
+      #bm-login-sep{text-align:center;color:#475569;font-size:12px;margin:4px 0 12px;position:relative;}
+      #bm-login-sep::before,#bm-login-sep::after{content:'';position:absolute;top:50%;width:42%;height:1px;background:#334155;}
+      #bm-login-sep::before{left:0;} #bm-login-sep::after{right:0;}
+      #bm-login-err{color:#f87171;font-size:13px;margin-top:8px;min-height:20px;text-align:center;}
+    `;
+    const style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'bm-login-overlay';
+    overlay.innerHTML = `
+      <div id="bm-login-box">
+        <h2>🏐 BM Nava</h2>
+        <p>Control de cargas · Acceso restringido</p>
+        <label>Email</label>
+        <input id="bm-email" type="email" placeholder="correo@bmnava.es" autocomplete="email"/>
+        <label>Contraseña</label>
+        <input id="bm-pass" type="password" placeholder="••••••••" autocomplete="current-password"/>
+        <button id="bm-login-btn">Entrar</button>
+        <div id="bm-login-sep">o</div>
+        <button id="bm-google-btn">
+          <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          Entrar con Google
+        </button>
+        <div id="bm-login-err"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    function showErr(msg){ document.getElementById('bm-login-err').textContent = msg; }
+    function setLoading(v){
+      document.getElementById('bm-login-btn').disabled = v;
+      document.getElementById('bm-google-btn').disabled = v;
+    }
+
+    document.getElementById('bm-login-btn').addEventListener('click', async () => {
+      const email = document.getElementById('bm-email').value.trim();
+      const pass  = document.getElementById('bm-pass').value;
+      if(!email||!pass){ showErr('Introduce email y contraseña'); return; }
+      setLoading(true);
+      try {
+        await _fbauth.signInWithEmailAndPassword(email, pass);
+      } catch(e) {
+        showErr(e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found'
+          ? 'Email o contraseña incorrectos'
+          : 'Error: ' + e.message);
+        setLoading(false);
+      }
+    });
+
+    document.getElementById('bm-google-btn').addEventListener('click', async () => {
+      setLoading(true);
+      try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        await _fbauth.signInWithPopup(provider);
+      } catch(e) {
+        showErr('Error al entrar con Google: ' + e.message);
+        setLoading(false);
+      }
+    });
+
+    // También permite login con Enter
+    document.getElementById('bm-pass').addEventListener('keydown', e => {
+      if(e.key === 'Enter') document.getElementById('bm-login-btn').click();
+    });
+  })();
+
+  /* ── Observador de sesión: muestra/oculta la app según login ── */
+  window._AUTH_READY = new Promise(resolve => {
+    _fbauth.onAuthStateChanged(user => {
+      const overlay = document.getElementById('bm-login-overlay');
+      if(user){
+        if(overlay) overlay.remove();
+        resolve(user);
+      } else {
+        if(overlay) overlay.style.display = 'flex';
+        // Si la overlay fue eliminada, la volvemos a mostrar (logout)
+        else { location.reload(); }
+      }
+    });
+  });
+
+  /* ── DB API ── */
   const KEY_MAP = {
     bmnava_physio:     'physio',
     bmnava_med:        'med',
@@ -51,7 +153,6 @@
       if (!name) { localStorage.setItem(lsKey, value); return; }
       try {
         await _fbdb.collection('bmnava').doc(name).set({ v: value, ts: Date.now() });
-        console.log('[DB] guardado OK:', name);
       } catch(e) {
         console.warn('[DB] set error', lsKey, e);
         localStorage.setItem(lsKey, value);
@@ -67,6 +168,7 @@
   };
 
   window._DB_READY = (async () => {
+    await window._AUTH_READY; // espera a que el usuario esté autenticado
     window._DB_PRELOAD = {};
     const load = async (lsKey, stateKey, defaultVal) => {
       const raw = await window._DB.get(lsKey);
